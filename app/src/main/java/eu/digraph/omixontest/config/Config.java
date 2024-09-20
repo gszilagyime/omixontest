@@ -13,81 +13,39 @@ import org.json.JSONObject;
 @Value
 public class Config {
 
-    private static final String ENDS_ALIGNMENT = "endsAlignment";
-    private static final String MID_ALIGNMENT = "midAlignment";
-    private static final String BEST_ALIGNMENT = "bestAlignment";
+    List<Group> groups;
 
-    public static Config of(String source) {
-        var content = new JSONObject(source);
-        return new Config(
-                Collections.unmodifiableList(
-                        parseEnds(content.getJSONObject(ENDS_ALIGNMENT))),
-                Collections.unmodifiableList(
-                        parseMid(content.getJSONObject(MID_ALIGNMENT))),
-                Collections.unmodifiableList(
-                        parseBest(content.getJSONObject(BEST_ALIGNMENT)))
-        );
-    }
+    public Config(AlignmentType alignmentTypes, String source) {
+        var tmp = new ArrayList<Group>();
 
-    private static List<endsAlignmentGroup> parseEnds(JSONObject alignmentGroup) {
-        final List<endsAlignmentGroup> groups = new ArrayList<>();
+        var relevantConfig = new JSONObject(source).
+                getJSONObject(alignmentTypes.name());
 
-        alignmentGroup.keys().forEachRemaining(groupName -> {
-            var group = alignmentGroup.getJSONObject(groupName);
-            groups.add(new endsAlignmentGroup(groupName,
-                                              group.getString("prefix"),
-                                              group.getString("postfix")));
-        });
-        return groups;
-    }
+        relevantConfig.keys().
+                forEachRemaining(groupName -> {
+                    var group = relevantConfig.getJSONObject(groupName);
+                    tmp.add(switch (alignmentTypes) {
+                        case endsAlignment ->
+                            new Group(groupName,
+                                      group.getString("prefix"),
+                                      group.getString("postfix"),
+                                      null);
+                        case midAlignment, bestAlignment ->
+                            new Group(groupName,
+                                      null,
+                                      null,
+                                      group.getString("infix"));
+                    });
+                });
+        groups = Collections.unmodifiableList(tmp);
 
-    private static List<midAlignmentGroup> parseMid(JSONObject alignmentGroup) {
-        final List<midAlignmentGroup> groups = new ArrayList<>();
-
-        alignmentGroup.keys().forEachRemaining(groupName -> {
-            var group = alignmentGroup.getJSONObject(groupName);
-            groups.add(new midAlignmentGroup(groupName,
-                                             group.getString("infix")));
-        });
-        return groups;
-    }
-
-    private static List<bestAlignmentGroup> parseBest(JSONObject alignmentGroup) {
-        final List<bestAlignmentGroup> groups = new ArrayList<>();
-
-        alignmentGroup.keys().forEachRemaining(groupName -> {
-            var group = alignmentGroup.getJSONObject(groupName);
-            groups.add(new bestAlignmentGroup(groupName,
-                                              group.getString("infix")));
-        });
-        return groups;
-    }
-    List<endsAlignmentGroup> endsAlignmentGroups;
-    List<midAlignmentGroup> midAlignmentGroups;
-    List<bestAlignmentGroup> bestAlignmentGroups;
-
-    public enum AlignmentTypes {
-        endsAlignment,
-        midAlignment,
-        bestAlignment
     }
 
     @Value
-    public static class endsAlignmentGroup {
+    public static class Group {
 
-        String name, prefix, postfix;
-    }
+        String name, prefix, postfix, infix;
 
-    @Value
-    public static class midAlignmentGroup {
-
-        String name, infix;
-    }
-
-    @Value
-    public static class bestAlignmentGroup {
-
-        String name, infix;
     }
 
 }

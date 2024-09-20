@@ -46,4 +46,5 @@ java {
 application {
     // Define the main class for the application.
     mainClass = 'eu.digraph.omixontest.App'
+//    applicationDefaultJvmArgs = ["sded",  "cwwe"]
 }
