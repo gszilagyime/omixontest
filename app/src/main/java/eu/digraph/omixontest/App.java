@@ -1,9 +1,6 @@
 package eu.digraph.omixontest;
 
 import eu.digraph.omixontest.config.AlignmentType;
-import static eu.digraph.omixontest.config.AlignmentType.bestAlignment;
-import static eu.digraph.omixontest.config.AlignmentType.endsAlignment;
-import static eu.digraph.omixontest.config.AlignmentType.midAlignment;
 import eu.digraph.omixontest.config.Config;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -13,6 +10,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +19,6 @@ import lombok.extern.slf4j.Slf4j;
 @Value
 public class App {
 
-    private static final char WILDCARD = '?';
     AlignmentType alignmentType;
     Config config;
     Map<String, List<String>> buckets;
@@ -80,29 +77,24 @@ public class App {
             config.getGroups().forEach(group -> buckets.put(group.getName(),
                                                             new ArrayList<>()));
 
+            final Map<String, Pattern> patterns = new TreeMap<>();
+
+            config.getGroups().forEach(group -> {
+                patterns.put(group.getName(),
+                             alignmentType == AlignmentType.endsAlignment
+                             ? Pattern.compile("^" + group.getPrefix() + ".*" + group.getPostfix() + "$", Pattern.MULTILINE)
+                             : Pattern.compile(group.getInfix(), Pattern.MULTILINE));
+            });
+
             for (var line : Files.readAllLines(Path.of(sequencingFilePath))) {
                 var sanitized = line.trim();
-                var found = false;
 
-                for (var group : config.getGroups()) {
-                    switch (alignmentType) {
-                        case endsAlignment -> {
-                            if (sanitized.startsWith(group.getPrefix())
-                                && sanitized.endsWith(group.getPostfix())) {
-                                buckets.get(group.getName()).add(sanitized);
-                                found = true;
-                            }
-                        }
-                        case midAlignment -> {
-                            if (sanitized.contains(group.getInfix())) {
-                                buckets.get(group.getName()).add(sanitized);
-                                found = true;
-                            }
-                        }
-                    }
-                }
-                if (!found) {
+                var found = patterns.entrySet().stream().filter(e -> e.getValue().matcher(sanitized).find()).findFirst();
+                if (found.isPresent()) {
+                    buckets.get(found.get().getKey()).add(sanitized);
+                } else {
                     buckets.get("unmatched").add(sanitized);
+
                 }
             }
             return buckets;
@@ -134,7 +126,7 @@ public class App {
                     for (int shift = 0; shift <= sanitized.length() - infix.length(); shift++) {
                         int hits = 0;
                         for (int i = 0; i < infix.length(); i++) {
-                            if (WILDCARD == infix.charAt(i) || sanitized.charAt(i + shift) == infix.charAt(i)) {
+                            if ('.' == infix.charAt(i) || sanitized.charAt(i + shift) == infix.charAt(i)) {
                                 hits++;
                             }
                         }
@@ -158,7 +150,6 @@ public class App {
                 }
 
             }
-            unmatchedBucket.clear();
             return buckets;
         } catch (IOException e) {
             var msg = "Error processing sequencing file: " + sequencingFilePath;
