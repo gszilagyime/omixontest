@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.regex.Pattern;
+import lombok.Getter;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
@@ -12,53 +13,69 @@ import org.json.JSONObject;
  *
  * @author gszilagyi
  */
-@Value
 @Slf4j
 public class Config {
 
     private static final char WILDCARD = '?';
+    @Getter
+    private final List<Group> groups;
+    @Getter
+    private final AlignmentType alignmentType;
 
-    List<Group> groups;
-    private final Pattern pattern;
+    private final Pattern patternForValidSequence = Pattern.compile("^[ACTG\\?]+$",
+                                                                    Pattern.MULTILINE);
+    // Just a quick and dirty check
+    private final Pattern patternForValidFileName = Pattern.compile("[\\p{Alnum}\\.:\\\\/\\ ]*",
+                                                                    Pattern.UNICODE_CHARACTER_CLASS);
 
-    public Config(AlignmentType alignmentTypes, String source) {
-        // production version
-        // pattern = Pattern.compile("^[ACTG\\?]+$", Pattern.MULTILINE);
+    public Config(AlignmentType alignmentType, String source) {
+        this.alignmentType = alignmentType;
 
-        // development version
-        pattern = Pattern.compile("^[A-Z1-9\\?]+$", Pattern.MULTILINE);
+        // use a temporary collection as we want the groups to be unmodifiable
         var tmp = new ArrayList<Group>();
 
-        var relevantConfig = new JSONObject(source).
-                getJSONObject(alignmentTypes.name());
+        // only parse the relevant part from the config
+        var relevantConfig = new JSONObject(source).getJSONObject(alignmentType.label);
 
         relevantConfig.keys().
-                forEachRemaining(groupName -> {
+                forEachRemaining((String groupName) -> {
                     var group = relevantConfig.getJSONObject(groupName);
-                    tmp.add(switch (alignmentTypes) {
-                        case endsAlignment ->
-                            new Group(groupName,
-                                      checkedConfig(group.getString("prefix")),
-                                      checkedConfig(group.getString("postfix")),
+                    tmp.add(switch (alignmentType) {
+                        case ENDS_ALIGNMENT ->
+                            new Group(sanitizeGroupName(groupName),
+                                      sanitizeSequencePattern(group.getString("prefix")),
+                                      sanitizeSequencePattern(group.getString("postfix")),
                                       null);
-                        case midAlignment, bestAlignment ->
-                            new Group(groupName,
+                        case MID_ALIGNMENT, BEST_ALIGNMENT ->
+                            new Group(sanitizeGroupName(groupName),
                                       null,
                                       null,
-                                      checkedConfig(group.getString("infix")));
+                                      sanitizeSequencePattern(group.getString("infix")));
                     });
                 });
         groups = Collections.unmodifiableList(tmp);
 
     }
 
-    private String checkedConfig(String line) {
-        if (!pattern.matcher(line).matches()) {
+    private String sanitizeSequencePattern(String line) {
+        // a bit of validation
+        if (!patternForValidSequence.matcher(line).matches()) {
             var msg = "Invalid content in the config file: " + line;
             log.error(msg);
             throw new IllegalArgumentException(msg);
         }
+        // and replacement of the '?' char to '.' as it makes life easier with regexp patterns
         return line.replace(WILDCARD, '.');
+    }
+
+    private String sanitizeGroupName(String groupName) {
+        // the group names will be used as part of the output filenames, it is prudent to do some basic checks on them
+        if (!patternForValidFileName.matcher(groupName).matches()) {
+            var msg = "Invalid content in the config file: " + groupName;
+            log.error(msg);
+            throw new IllegalArgumentException(msg);
+        }
+        return groupName;
     }
 
     @Value

@@ -8,21 +8,22 @@ import org.junit.Test;
  *
  * @author gszilagyi
  */
+@SuppressWarnings("unused")
 public class ConfigIT {
 
     @Test(expected = JSONException.class)
     public void testInvalidSource() {
-        var instance = new Config(AlignmentType.midAlignment, "");
+        var instance = new Config(AlignmentType.MID_ALIGNMENT, "");
     }
 
     @Test(expected = JSONException.class)
     public void testEmptySource() {
-        var instance = new Config(AlignmentType.midAlignment, "{}");
+        var instance = new Config(AlignmentType.MID_ALIGNMENT, "{}");
     }
 
     @Test
-    public void testMid() {
-        var instance = new Config(AlignmentType.endsAlignment,
+    public void testParse() {
+        var instance = new Config(AlignmentType.ENDS_ALIGNMENT,
                               """
                                                                   {
                                                                   "endsAlignment" : {
@@ -32,7 +33,7 @@ public class ConfigIT {
                                                                       },
                                                                       "group2" : {
                                                                           "prefix" : "CAGTAAG",
-                                                                          "postfix" : "ACGTACA"
+                                                                          "postfix" : "AC?TACA"
                                                                       }
                                                                   },
                                                                   "midAlignment" : {
@@ -51,8 +52,15 @@ public class ConfigIT {
                                                               }
                                                               """);
         Assert.assertTrue(instance.getGroups().size() == 2);
+        Assert.assertEquals(instance.getAlignmentType(), AlignmentType.ENDS_ALIGNMENT);
+        Assert.assertEquals("AC.TACA",
+                            instance.getGroups().stream().
+                                    filter(g -> g.getName().equalsIgnoreCase("group2")).
+                                    findFirst().
+                                    get().
+                                    getPostfix());
 
-        instance = new Config(AlignmentType.midAlignment,
+        instance = new Config(AlignmentType.MID_ALIGNMENT,
                               """
                                                                   {
                                                                   "endsAlignment" : {
@@ -67,7 +75,7 @@ public class ConfigIT {
                                                                   },
                                                                   "midAlignment" : {
                                                                       "group1" : {
-                                                                          "infix" : CACTAACT
+                                                                          "infix" : C??T?AACT
                                                                       },
                                                                       "group2" : {
                                                                           "infix" : CAGACAGT
@@ -81,7 +89,15 @@ public class ConfigIT {
                                                               }
                                                               """);
         Assert.assertTrue(instance.getGroups().size() == 2);
-        instance = new Config(AlignmentType.bestAlignment,
+        Assert.assertEquals(instance.getAlignmentType(), AlignmentType.MID_ALIGNMENT);
+        Assert.assertEquals("C..T.AACT",
+                            instance.getGroups().stream().
+                                    filter(g -> g.getName().equalsIgnoreCase("group1")).
+                                    findFirst().
+                                    get().
+                                    getInfix());
+
+        instance = new Config(AlignmentType.BEST_ALIGNMENT,
                               """
                                                                   {
                                                                   "endsAlignment" : {
@@ -105,11 +121,21 @@ public class ConfigIT {
                                                                   "bestAlignment" : {
                                                                       "group1" : {
                                                                           "infix" : CTATCTAGCAAT
+                                                                      },
+                                                                      "group2" : {
+                                                                          "infix" : TACA???TACC
                                                                       }
                                                                   }
                                                               }
                                                               """);
-        Assert.assertTrue(instance.getGroups().size() == 1);
+        Assert.assertTrue(instance.getGroups().size() == 2);
+        Assert.assertEquals(instance.getAlignmentType(), AlignmentType.BEST_ALIGNMENT);
+        Assert.assertEquals("TACA...TACC",
+                            instance.getGroups().stream().
+                                    filter(g -> g.getName().equalsIgnoreCase("group2")).
+                                    findFirst().
+                                    get().
+                                    getInfix());
     }
 
 }
